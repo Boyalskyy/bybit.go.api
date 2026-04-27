@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +19,7 @@ func (b *WebSocket) handleIncomingMessages() {
 	for {
 		_, message, err := b.conn.ReadMessage()
 		if err != nil {
-			fmt.Println("Error reading:", err)
+			log.Printf("bybit ws: error reading: %v", err)
 			b.isConnected = false
 			return
 		}
@@ -26,7 +27,7 @@ func (b *WebSocket) handleIncomingMessages() {
 		if b.onMessage != nil {
 			err := b.onMessage(string(message))
 			if err != nil {
-				fmt.Println("Error handling message:", err)
+				log.Printf("bybit ws: error handling message: %v", err)
 				return
 			}
 		}
@@ -40,10 +41,10 @@ func (b *WebSocket) monitorConnection() {
 	for {
 		<-ticker.C
 		if !b.isConnected && b.ctx.Err() == nil { // Check if disconnected and context not done
-			fmt.Println("Attempting to reconnect...")
+			log.Println("bybit ws: attempting to reconnect...")
 			con := b.Connect() // Example, adjust parameters as needed
 			if con == nil {
-				fmt.Println("Reconnection failed:")
+				log.Println("bybit ws: reconnection failed")
 			} else {
 				b.isConnected = true
 				go b.handleIncomingMessages() // Restart message handling
@@ -127,7 +128,7 @@ func (b *WebSocket) Connect() *WebSocket {
 
 	if b.requiresAuthentication() {
 		if err = b.sendAuth(); err != nil {
-			fmt.Println("Failed Connection:", fmt.Sprintf("%v", err))
+			log.Printf("bybit ws: connection failed: %v", err)
 			return nil
 		}
 	}
@@ -149,12 +150,9 @@ func (b *WebSocket) SendSubscription(args []string) (*WebSocket, error) {
 		"op":     "subscribe",
 		"args":   args,
 	}
-	fmt.Println("subscribe msg:", fmt.Sprintf("%v", subMessage["args"]))
 	if err := b.sendAsJson(subMessage); err != nil {
-		fmt.Println("Failed to send subscription:", err)
 		return b, err
 	}
-	fmt.Println("Subscription sent successfully.")
 	return b, nil
 }
 
@@ -171,32 +169,21 @@ func (b *WebSocket) SendRequest(op string, args map[string]interface{}, headers 
 		"op":     op,
 		"args":   []interface{}{args},
 	}
-	fmt.Println("request headers:", fmt.Sprintf("%v", request["header"]))
-	fmt.Println("request op channel:", fmt.Sprintf("%v", request["op"]))
-	fmt.Println("request msg:", fmt.Sprintf("%v", request["args"]))
 	if err := b.sendAsJson(request); err != nil {
-		fmt.Println("Failed to send websocket trade request:", err)
 		return b, err
 	}
-	fmt.Println("Successfully sent websocket trade request.")
 	return b, nil
 }
 
 func (b *WebSocket) SendTradeRequest(tradeTruest map[string]interface{}) (*WebSocket, error) {
-	fmt.Println("trade request headers:", fmt.Sprintf("%v", tradeTruest["header"]))
-	fmt.Println("trade request op channel:", fmt.Sprintf("%v", tradeTruest["op"]))
-	fmt.Println("trade request msg:", fmt.Sprintf("%v", tradeTruest["args"]))
 	if err := b.sendAsJson(tradeTruest); err != nil {
-		fmt.Println("Failed to send websocket trade request:", err)
 		return b, err
 	}
-	fmt.Println("Successfully sent websocket trade request.")
 	return b, nil
 }
 
 func ping(b *WebSocket) {
 	if b.pingInterval <= 0 {
-		fmt.Println("Ping interval is set to a non-positive value.")
 		return
 	}
 
@@ -213,17 +200,15 @@ func ping(b *WebSocket) {
 			}
 			jsonPingMessage, err := json.Marshal(pingMessage)
 			if err != nil {
-				fmt.Println("Failed to marshal ping message:", err)
+				log.Printf("bybit ws: failed to marshal ping: %v", err)
 				continue
 			}
 			if err := b.conn.WriteMessage(websocket.TextMessage, jsonPingMessage); err != nil {
-				fmt.Println("Failed to send ping:", err)
+				log.Printf("bybit ws: failed to send ping: %v", err)
 				return
 			}
-			fmt.Println("Ping sent with UTC time:", currentTime)
 
 		case <-b.ctx.Done():
-			fmt.Println("Ping context closed, stopping ping.")
 			return
 		}
 	}
@@ -257,14 +242,12 @@ func (b *WebSocket) sendAuth() error {
 
 	// Convert to hexadecimal instead of base64
 	signature := hex.EncodeToString(h.Sum(nil))
-	fmt.Println("signature generated : " + signature)
 
 	authMessage := map[string]interface{}{
 		"req_id": uuid.New(),
 		"op":     "auth",
 		"args":   []interface{}{b.apiKey, expires, signature},
 	}
-	fmt.Println("auth args:", fmt.Sprintf("%v", authMessage["args"]))
 	return b.sendAsJson(authMessage)
 }
 
